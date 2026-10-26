@@ -5,8 +5,33 @@ Nothing in this repo has been run on the real hardware yet. Everything below is 
 "estimate" need to be checked with a meter or against the manuals.
 
 ## Bring
-- NEMA 17 motor (XY42STH34-0354A), Adafruit TMC2209 breakout, 12 V supply, jumper wires, small screwdriver
-  for the terminal blocks, multimeter. The Uno, breadboards and USB cable stay in the lab.
+The Uno and breadboards stay in the lab. Check what the lab already has before carrying things in.
+
+**For the Uno motor test**
+- NEMA 17 motor (XY42STH34-0354A) and the Adafruit TMC2209 breakout
+- 12 V DC supply, 1 A or more, with bare leads or a barrel-jack-to-screw-terminal adapter for VM
+- Jumper wires: male-to-male for the Uno and breadboard, plus a few male-to-female for the Pi later
+- Small flat screwdriver for the terminal blocks and the current pot
+- Multimeter (coil resistance and VREF)
+- The Uno's USB-B cable, if it isn't with the board
+
+**For the Stage 0 measurements**
+- The leadscrew, its nut, and the 5 mL syringe
+- Calipers or a ruler
+
+**Nice to have**
+- 100 uF electrolytic capacitor, 25 V or higher, for across VM and GND
+- Tape or labels for marking the coil pairs
+
+**When the Pi comes in**
+- The Lexar USB stick (the Pi's boot drive) and a 5 V, 3 A USB-C supply with cable
+- A working way to reach the Pi over a network. The laptop's Ethernet port was unreliable, so plan this first.
+
+**Check before you go**
+- **Header pins.** The breakout's headers are not soldered yet. Resting the board on loose pins is OK for the
+  Stage 1 logic-only test, but wait for soldering before Stage 2 (see the warning there).
+- **Motor wire ends.** The driver's terminal blocks need bare wire. If the motor leads end in a plug, bring a
+  matching connector or a cable with bare ends.
 
 ## Stage 0: before any power
 1. **Coil pairs.** With the multimeter, Red-Yellow should read about 34 ohm, and Green-Gray about 34 ohm.
@@ -34,6 +59,12 @@ Upload `arduino/bringup/bringup.ino` (Tools > Board > Arduino Uno, pick the COM 
 yellow STEP LED and the red and green DIR LEDs on the driver should light.
 
 ## Stage 2: motor
+
+> **Solder the headers first.** With 12 V on VM, a header pin that loses contact can damage the driver or the Uno.
+> If GND or VIO drops out, current can find a path through the signal pins, and a loose EN pin can float and
+> enable the motor unexpectedly. If you must run before soldering, press the board down firmly, don't touch it
+> while powered, and keep the run short.
+
 1. Turn the driver's current pot to the low end. The motor is rated 0.35 A. The datasheet says current scales with
    VREF, and my estimate is about 0.45-0.5 V for roughly 0.35 A. Check Adafruit's guide for where to measure VREF.
 2. Connect the motor **before** powering VM. Never unplug it while VM is on.
