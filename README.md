@@ -1,4 +1,4 @@
-# PumpSystem
+# Pump System
 
 Drives a NEMA 17 stepper motor from a Raspberry Pi 4 through an Adafruit TMC2209 driver breakout (step/dir mode, no UART).
 
