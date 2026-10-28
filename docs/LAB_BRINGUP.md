@@ -4,12 +4,50 @@ Goal: confirm the driver, motor and wiring work using the Arduino Uno, then the 
 Nothing in this repo has been run on the real hardware yet. Everything below is the plan, and the numbers marked
 "estimate" need to be checked with a meter or against the manuals.
 
+## What you can do before the parts order arrives
+On order: 12 V DC supply, barrel socket with leads, Elegoo Uno R3, microSD card and reader, micro-HDMI cable,
+jumper wires. Until they arrive, use the lab's Uno and do:
+
+1. [Lab desktop setup](#lab-desktop-setup): get both sketches into the Arduino IDE and compile them.
+2. [Stage 0](#stage-0-before-any-power): measurements, no power.
+3. [Stage 1](#stage-1-uno-wiring-motor-power-off-motor-not-connected): logic test. No 12 V supply needed.
+4. [Stage 1b](#stage-1b-pump-sketch-logic-test-no-motor): pump sketch commands and limits, no motor.
+5. [Stage 2](#stage-2-motor) only if the lab has a bench DC supply. Otherwise wait for the 12 V supply.
+
+## Lab desktop setup
+Only these files are needed for the Uno work. Read this checklist on GitHub in the browser.
+
+| File | Use |
+|---|---|
+| `arduino/bringup/bringup.ino` | Logic test and first motor spin |
+| `arduino/pump_serial/pump_serial.ino` | Pump commands and limit tests |
+
+The Python files are for the Pi and the hotplate, later.
+
+1. **Get the sketches.** On GitHub, open each `.ino` file and click **Copy raw file**. In the Arduino IDE, use
+   **File > New Sketch**, paste over the template, and save as `bringup` or `pump_serial`. The IDE needs each sketch
+   in a folder of the same name, and saving this way does that. (Or use **Code > Download ZIP** and open the
+   extracted `.ino` files.)
+2. **Compile.** **Tools > Board > Arduino AVR Boards > Arduino Uno**, then **Verify** (checkmark) each sketch.
+   Both should end with "Done compiling". An error usually means a line was lost in the copy-paste.
+3. **Pick the port.** Plug in the Uno over USB and choose it under **Tools > Port** (for example `COM4`).
+   If unsure which port it is, unplug the Uno and see which entry disappears.
+
+**Shared desktop:** the repo is private, so log into GitHub in a private/incognito window, don't let the browser
+save the password, and log out when done. If you change a constant in the lab (`LEAD_MM`, `SYRINGE_ID_MM`,
+`PUSH_LEVEL`, `FLOW_CAL`), write the value down and commit it from your own computer later. Don't put git
+credentials on the lab desktop.
+
+If the IDE isn't installed and you can't install software there, ask your mentor. Arduino's web Cloud Editor is
+an option but also needs a small helper app installed.
+
 ## Bring
 The Uno and breadboards stay in the lab. Check what the lab already has before carrying things in.
 
 **For the Uno motor test**
 - NEMA 17 motor (XY42STH34-0354A) and the Adafruit TMC2209 breakout
-- 12 V DC supply, 1 A or more, with bare leads or a barrel-jack-to-screw-terminal adapter for VM
+- 12 V DC supply, 1 A or more (on order: 5.5 x 2.1 mm, center positive, plus a female barrel socket with
+  red/black 18 AWG leads). Until it arrives, a lab bench supply works for Stage 2.
 - Jumper wires: male-to-male for the Uno and breadboard, plus a few male-to-female for the Pi later
 - Small flat screwdriver for the terminal blocks and the current pot
 - Multimeter (coil resistance and VREF)
@@ -42,6 +80,9 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
    `SYRINGE_ID_MM = 2 * sqrt(5000 / (pi * L))`. The default of 12.06 mm is a typical 5 mL value, not measured.
 
 ## Stage 1: Uno wiring (motor power OFF, motor not connected)
+No 12 V supply is needed. The Uno runs from USB, and the driver's logic side (VIO) runs from the Uno's 5V pin.
+This stage only checks that STEP, DIR and EN reach the driver.
+
 | TMC2209 | Connects to |
 |---|---|
 | VIO | Uno 5V |
@@ -56,9 +97,30 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
 Only one controller (Uno or Pi) may be connected to STEP, DIR and EN at a time. Never connect Uno outputs to Pi pins.
 
 Upload `arduino/bringup/bringup.ino` (Tools > Board > Arduino Uno, pick the COM port). With VM off, the
-yellow STEP LED and the red and green DIR LEDs on the driver should light.
+yellow STEP LED and the red and green DIR LEDs on the driver should light, in a pattern of one revolution each
+way, a pause, and a repeat. Unsoldered headers are fine for this stage.
+
+## Stage 1b: pump sketch logic test (no motor)
+Same wiring as Stage 1, VM and motor still disconnected. Upload `arduino/pump_serial/pump_serial.ino` and open the
+Serial Monitor at 115200 baud, line ending "Newline". This checks the firmware logic only.
+
+| Send | Expect |
+|---|---|
+| On upload | `pump ready: 0.113 uL/step` and the command list |
+| `STATUS` | `idle pos=0 steps (0.000 mL of 5.0)` |
+| `ZERO` then `RUN 0.5 3` | `RUN 4412 steps at 441.16 steps/s` (last digits may differ slightly), STEP LED blinks about 10 s, then `DONE` |
+| `RUN 6 1` | `ERR past the end of the syringe` (more than the 5 mL stroke) |
+| `RUN 1 20` | `ERR rate needs ... steps/s, over MAX_HZ` (ceiling is about 10 mL/min) |
+| `ZERO` then `PULL 0.5 3` | `ERR past the start; retract less or use ZERO` |
+| `RUN 2 1`, then `STATUS` | `running` (a second `RUN` now gives `ERR busy`) |
+| `STOP` | `STOPPED`, and `STATUS` shows the partial position |
+
+If the lab has an oscilloscope, probe STEP during `RUN 1 1`: it should read about 147 Hz (1 mL/min).
 
 ## Stage 2: motor
+
+> **No 12 V supply yet?** A lab bench DC supply is a good first-spin source. Set it to 12 V with the current
+> limit at about 0.5 A, so a wiring mistake can't draw much. Never power VM from the Uno's 5V pin.
 
 > **Solder the headers first.** With 12 V on VM, a header pin that loses contact can damage the driver or the Uno.
 > If GND or VIO drops out, current can find a path through the signal pins, and a loose EN pin can float and
