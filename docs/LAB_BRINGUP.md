@@ -4,15 +4,44 @@ Goal: confirm the driver, motor and wiring work using the Arduino Uno, then the 
 Nothing in this repo has been run on the real hardware yet. Everything below is the plan, and the numbers marked
 "estimate" need to be checked with a meter or against the manuals.
 
-## What you can do before the parts order arrives
-On order: 12 V DC supply, barrel socket with leads, Elegoo Uno R3, microSD card and reader, micro-HDMI cable,
-jumper wires. Until they arrive, use the lab's Uno and do:
-
+## Order of work
 1. [Lab desktop setup](#lab-desktop-setup): get both sketches into the Arduino IDE and compile them.
 2. [Stage 0](#stage-0-before-any-power): measurements, no power.
 3. [Stage 1](#stage-1-uno-wiring-motor-power-off-motor-not-connected): logic test. No 12 V supply needed.
 4. [Stage 1b](#stage-1b-pump-sketch-logic-test-no-motor): pump sketch commands and limits, no motor.
-5. [Stage 2](#stage-2-motor) only if the lab has a bench DC supply. Otherwise wait for the 12 V supply.
+5. [Stage 2](#stage-2-motor): 12 V power and the first motor spin.
+6. [Stage 3](#stage-3-pump-sketch) to [Stage 5](#stage-5-raspberry-pi): pump, hotplate, then the Pi.
+
+## Parts and where they go
+| Part | Goes to |
+|---|---|
+| 12 V DC adapter (5.5 x 2.1 mm, center positive) | Plugs into the barrel socket |
+| Barrel socket with red/black 18 AWG leads | Driver's power terminal block: red to VM, black to GND |
+| Elegoo Uno R3 (or the lab's Uno) | Driver's STEP, DIR, EN, VIO and GND header pins, through the breadboard |
+| NEMA 17 motor | Driver's motor terminal block (A1/A2, B1/B2) |
+| Shaft coupler | Motor shaft to leadscrew |
+| microSD card + USB reader | Flashed on your own computer with Imager, then into the Pi |
+| Micro-HDMI to HDMI cable | Pi's HDMI0 port (the one next to USB-C) to a monitor |
+| Jumper wires | Male-to-male for the Uno, male-to-female for the Pi header |
+
+## Full wiring (Uno)
+```
+ 12 V adapter --> barrel socket --red---> VM   \  driver power
+                                --black-> GND  /  terminal block
+
+ Uno 5V  -----> VIO   \
+ Uno GND -----> GND    |
+ Uno D3  -----> STEP   |  driver header pins
+ Uno D4  -----> DIR    |  (through the breadboard)
+ Uno D5  -----> EN    /
+
+ Motor Red / Yellow --> A1 / A2   \  driver motor
+ Motor Green / Gray --> B1 / B2   /  terminal block
+
+ Uno USB --> lab desktop (power + Serial Monitor)
+```
+Match the names to the board's silkscreen. The Uno GND and the 12 V black lead both land on the driver's GND,
+which gives the Uno and the motor supply a common ground. The motor supply never connects to the Uno itself.
 
 ## Lab desktop setup
 Only these files are needed for the Uno work. Read this checklist on GitHub in the browser.
@@ -31,7 +60,9 @@ The Python files are for the Pi and the hotplate, later.
 2. **Compile.** **Tools > Board > Arduino AVR Boards > Arduino Uno**, then **Verify** (checkmark) each sketch.
    Both should end with "Done compiling". An error usually means a line was lost in the copy-paste.
 3. **Pick the port.** Plug in the Uno over USB and choose it under **Tools > Port** (for example `COM4`).
-   If unsure which port it is, unplug the Uno and see which entry disappears.
+   If unsure which port it is, unplug the Uno and see which entry disappears. The Elegoo Uno uses the same
+   **Arduino Uno** board setting. If it shows no port at all, it may use a CH340 USB chip, which needs Elegoo's
+   CH340 driver on Windows.
 
 **Shared desktop:** the repo is private, so log into GitHub in a private/incognito window, don't let the browser
 save the password, and log out when done. If you change a constant in the lab (`LEAD_MM`, `SYRINGE_ID_MM`,
@@ -46,8 +77,7 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
 
 **For the Uno motor test**
 - NEMA 17 motor (XY42STH34-0354A) and the Adafruit TMC2209 breakout
-- 12 V DC supply, 1 A or more (on order: 5.5 x 2.1 mm, center positive, plus a female barrel socket with
-  red/black 18 AWG leads). Until it arrives, a lab bench supply works for Stage 2.
+- 12 V DC adapter (5.5 x 2.1 mm, center positive) and the barrel socket with red/black leads
 - Jumper wires: male-to-male for the Uno and breadboard, plus a few male-to-female for the Pi later
 - Small flat screwdriver for the terminal blocks and the current pot
 - Multimeter (coil resistance and VREF)
@@ -62,8 +92,10 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
 - Tape or labels for marking the coil pairs
 
 **When the Pi comes in**
-- The Lexar USB stick (the Pi's boot drive) and a 5 V, 3 A USB-C supply with cable
-- A working way to reach the Pi over a network. The laptop's Ethernet port was unreliable, so plan this first.
+- The Pi with the flashed microSD card in it, and a 5 V, 3 A USB-C supply
+- Micro-HDMI to HDMI cable, plus a USB keyboard if the lab has no spare one
+- Male-to-female jumper wires
+- The Lexar USB stick with `stepper.py`, `pump.py` and `hotplate.py` on it (the Pi has no network to clone the repo)
 
 **Check before you go**
 - **Header pins.** The breakout's headers are not soldered yet. Resting the board on loose pins is OK for the
@@ -119,21 +151,35 @@ If the lab has an oscilloscope, probe STEP during `RUN 1 1`: it should read abou
 
 ## Stage 2: motor
 
-> **No 12 V supply yet?** A lab bench DC supply is a good first-spin source. Set it to 12 V with the current
-> limit at about 0.5 A, so a wiring mistake can't draw much. Never power VM from the Uno's 5V pin.
+> Never power VM from the Uno's 5V pin. A lab bench supply set to 12 V with a 0.5 A current limit also works
+> in place of the adapter, and is the gentlest option for a first spin.
 
 > **Solder the headers first.** With 12 V on VM, a header pin that loses contact can damage the driver or the Uno.
 > If GND or VIO drops out, current can find a path through the signal pins, and a loose EN pin can float and
 > enable the motor unexpectedly. If you must run before soldering, press the board down firmly, don't touch it
 > while powered, and keep the run short.
 
+**Prepare the 12 V leads (adapter unplugged from the wall)**
+1. Cut the socket's leads to a workable length (they come 6 ft long) and strip about 5 mm off each.
+2. Plug the adapter into the wall and into the socket. With the multimeter on DC volts, confirm **red reads
+   +12 V relative to black**. If it reads -12 V, the leads are swapped: use black as + from here on, and mark it.
+3. Unplug the adapter from the wall again.
+
+The 18 AWG leads are too thick for breadboard holes and will damage them. Clamp them only in the driver's
+power terminal block.
+
+**First spin**
 1. Turn the driver's current pot to the low end. The motor is rated 0.35 A. The datasheet says current scales with
    VREF, and my estimate is about 0.45-0.5 V for roughly 0.35 A. Check Adafruit's guide for where to measure VREF.
-2. Connect the motor **before** powering VM. Never unplug it while VM is on.
-3. Power VM at 12 V. Expect one revolution each way, a pause, and a repeat.
-4. If the motor only buzzes or shakes, a coil pair is crossed. If it runs backward, swap one coil's two wires.
-5. If the driver or motor gets very hot, cut power and lower the pot. If the supply wires are long, add a 100 uF
+2. Connect the motor to the motor terminal block **before** powering VM. Never unplug it while VM is on.
+3. Clamp the + lead into VM and the - lead into GND on the power terminal block. Recheck both.
+4. Upload `bringup.ino` with the Uno on USB, then plug the adapter into the wall. Expect one revolution each
+   way, a pause, and a repeat.
+5. If the motor only buzzes or shakes, a coil pair is crossed. If it runs backward, swap one coil's two wires.
+6. If the driver or motor gets very hot, cut power and lower the pot. If the supply wires are long, add a 100 uF
    or larger capacitor across VM and GND at the board.
+
+To power down: unplug the adapter first, then the Uno's USB.
 
 ## Stage 3: pump sketch
 Upload `arduino/pump_serial/pump_serial.ino`. Serial Monitor: 115200 baud, line ending "Newline".
@@ -157,6 +203,40 @@ COM port (for example `COM3`). Run it with no flags first. The command names and
 settings are from memory of IKA's protocol and are NOT verified for the RCT. Compare the replies with the
 manual before using `--set`. Set the hotplate's own safety circuit above your highest process temperature.
 
-## Stage 5: Raspberry Pi (later)
-`stepper.py` and `pump.py` drive the same driver from the Pi (STEP GPIO17, DIR GPIO27, EN GPIO22, VIO to 3.3 V).
-See `README.md`. The Pi has not been reachable over a network yet, and USB boot is unconfirmed.
+## Stage 5: Raspberry Pi
+`stepper.py` and `pump.py` drive the same driver from the Pi. The Pi boots from the microSD card; the Lexar
+stick is now just for carrying files.
+
+**Flash the microSD (on your own computer)**
+1. Put the card in the USB reader and open Raspberry Pi Imager.
+2. Choose Raspberry Pi 4, Raspberry Pi OS (64-bit), and the microSD card. Double-check it is the card, not
+   another drive.
+3. In the settings: hostname `pumppi`, your username and password, SSH on. Skip Wi-Fi.
+4. Write. Then reformat the Lexar stick (it still holds the old Pi OS install): in Windows File Explorer,
+   right-click it > Format > exFAT. If Windows only shows a small "bootfs" drive, use Disk Management to delete
+   the stick's partitions first. Copy `stepper.py`, `pump.py` and `hotplate.py` onto it.
+
+**First boot (in the lab)**
+1. Card into the Pi's slot on the underside. Micro-HDMI into **HDMI0** (next to USB-C), keyboard into a USB port.
+2. Connect the 5 V, 3 A USB-C supply last. Log in at the console.
+3. Plug in the Lexar stick and copy the files to the home folder (it mounts under `/media/<user>/`).
+4. Check pyserial is there: `python3 -c "import serial"` (no output means it is).
+
+**Rewire the driver for the Pi (all power off)**
+1. Disconnect the Uno's STEP, DIR, EN, VIO and GND wires from the driver completely.
+2. Wire the Pi with male-to-female jumpers:
+
+| TMC2209 | Pi pin |
+|---|---|
+| VIO | 3.3V (pin 1) |
+| GND | GND (pin 6) |
+| STEP | GPIO17 (pin 11) |
+| DIR | GPIO27 (pin 13) |
+| EN | GPIO22 (pin 15) |
+
+VM, GND and the motor stay on the terminal blocks as before. VIO must be 3.3 V, never 5 V, on the Pi.
+3. Boot the Pi, plug in the 12 V adapter, and run `python3 stepper.py`: one revolution each way.
+4. Then `python3 pump.py --dry-run` with your volume and rate to check the numbers before a real run.
+   Set `LEAD_MM`, `SYRINGE_ID_MM` and `SYRINGE_VOLUME_ML` in `pump.py` first (they start as None).
+
+See `README.md` for the Pi notes (jitter, idle heat, microstepping).
