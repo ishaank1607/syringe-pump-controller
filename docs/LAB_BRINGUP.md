@@ -95,7 +95,6 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
 - The Pi with the flashed microSD card in it, and a 5 V, 3 A USB-C supply
 - Micro-HDMI to HDMI cable, plus a USB keyboard if the lab has no spare one
 - Male-to-female jumper wires
-- The Lexar USB stick with `stepper.py`, `pump.py` and `hotplate.py` on it (the Pi has no network to clone the repo)
 
 **Check before you go**
 - **Header pins.** The breakout's headers are not soldered yet. Resting the board on loose pins is OK for the
@@ -204,22 +203,22 @@ settings are from memory of IKA's protocol and are NOT verified for the RCT. Com
 manual before using `--set`. Set the hotplate's own safety circuit above your highest process temperature.
 
 ## Stage 5: Raspberry Pi
-`stepper.py` and `pump.py` drive the same driver from the Pi. The Pi boots from the microSD card; the Lexar
-stick is now just for carrying files.
+`stepper.py` and `pump.py` drive the same driver from the Pi. The Pi boots from the microSD card, and the
+Python files ride along on the card's boot partition, so no USB stick is needed.
 
 **Flash the microSD (on your own computer)**
 1. Put the card in the USB reader and open Raspberry Pi Imager.
 2. Choose Raspberry Pi 4, Raspberry Pi OS (64-bit), and the microSD card. Double-check it is the card, not
    another drive.
 3. In the settings: hostname `pumppi`, your username and password, SSH on. Skip Wi-Fi.
-4. Write. Then reformat the Lexar stick (it still holds the old Pi OS install): in Windows File Explorer,
-   right-click it > Format > exFAT. If Windows only shows a small "bootfs" drive, use Disk Management to delete
-   the stick's partitions first. Copy `stepper.py`, `pump.py` and `hotplate.py` onto it.
+4. Write. When it finishes, unplug and replug the reader. Windows shows a small drive named **bootfs**: copy
+   `stepper.py`, `pump.py` and `hotplate.py` onto it, then eject. Ignore any prompt to format the card's other
+   partition (that is the Pi's Linux filesystem; formatting it erases the install).
 
 **First boot (in the lab)**
 1. Card into the Pi's slot on the underside. Micro-HDMI into **HDMI0** (next to USB-C), keyboard into a USB port.
 2. Connect the 5 V, 3 A USB-C supply last. Log in at the console.
-3. Plug in the Lexar stick and copy the files to the home folder (it mounts under `/media/<user>/`).
+3. Copy the files from the boot partition to your home folder: `cp /boot/firmware/*.py ~/`
 4. Check pyserial is there: `python3 -c "import serial"` (no output means it is).
 
 **Rewire the driver for the Pi (all power off)**
