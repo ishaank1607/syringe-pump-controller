@@ -144,18 +144,31 @@ This stage only checks that STEP, DIR and EN reach the driver.
 Only one controller (Uno or Pi) may be connected to STEP, DIR and EN at a time. Never connect Uno outputs to Pi pins.
 
 Upload `arduino/bringup/bringup.ino` (Tools > Board > Arduino Uno, pick the COM port). With the 12 V off,
-the driver's **S** (step) LED should flicker and the **F** / **B** (direction) LEDs should swap, in a pattern of one revolution each
-way, a pause, and a repeat. Unsoldered headers are fine for this stage.
+the driver's **S** (step) LED should glow steadily for about 4 s (one revolution, 400 steps/s is too fast to see
+as blinking), then **F** / **B** (direction) swap and S glows another 4 s, then all dark for the pause, and repeat.
+Unsoldered headers are fine for this stage.
+
+**If S stays dark:** with `bringup.ino` running, set the meter to DC volts, black probe on GND, and touch the red
+probe to the top of the driver's STEP pin. It should read about 2.5 V while stepping (a 50% square wave averages
+to half of 5 V). Then check Uno D3 the same way, and VDD (should be 5 V).
+- D3 reads 2.5 V but the driver's STEP pin doesn't: bad contact between the jumper, breadboard or header. Reseat
+  or press the board down; this is where unsoldered headers bite.
+- D3 reads 0 V: wrong pin (D3, not A3) or the sketch isn't running (check the Serial Monitor at 115200).
+- STEP reads 2.5 V but S is dark: check VDD and GND reach the board.
 
 ## Stage 1b: pump sketch logic test (no motor)
 Same wiring as Stage 1, 12 V and motor still disconnected. Upload `arduino/pump_serial/pump_serial.ino` and open the
 Serial Monitor at 115200 baud, line ending "Newline". This checks the firmware logic only.
 
+The **S** LED will **not** visibly light here. This sketch holds STEP high for only a few microseconds per step
+(under 0.5% of the time), which is too short to see. The serial replies are the check. Use `bringup.ino`
+(Stage 1) to check S, or an oscilloscope on STEP.
+
 | Send | Expect |
 |---|---|
 | On upload | `pump ready: 0.113 uL/step` and the command list |
 | `STATUS` | `idle pos=0 steps (0.000 mL of 5.0)` |
-| `ZERO` then `RUN 0.5 3` | `RUN 4412 steps at 441.16 steps/s` (last digits may differ slightly), **S** LED blinks about 10 s, then `DONE` |
+| `ZERO` then `RUN 0.5 3` | `RUN 4412 steps at 441.16 steps/s` (last digits may differ slightly), then `DONE` about 10 s later |
 | `RUN 6 1` | `ERR past the end of the syringe` (more than the 5 mL stroke) |
 | `RUN 1 20` | `ERR rate needs ... steps/s, over MAX_HZ` (ceiling is about 10 mL/min) |
 | `ZERO` then `PULL 0.5 3` | `ERR past the start; retract less or use ZERO` |
