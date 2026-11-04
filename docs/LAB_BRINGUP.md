@@ -16,9 +16,9 @@ Nothing in this repo has been run on the real hardware yet. Everything below is 
 | Part | Goes to |
 |---|---|
 | 12 V DC adapter (5.5 x 2.1 mm, center positive) | Plugs into the barrel socket |
-| Barrel socket with red/black 18 AWG leads | Driver's power terminal block: red to VM, black to GND |
-| Elegoo Uno R3 (or the lab's Uno) | Driver's STEP, DIR, EN, VIO and GND header pins, through the breadboard |
-| NEMA 17 motor | Driver's motor terminal block (A1/A2, B1/B2) |
+| Barrel socket with red/black 18 AWG leads | Driver's terminal block, two leftmost screws: red to **+**, black to **−** |
+| Elegoo Uno R3 (or the lab's Uno) | Driver's STEP, DIR, EN, VDD and GND header pins, through the breadboard |
+| NEMA 17 motor | Driver's terminal block, four right screws (2B 2A 1A 1B) |
 | Shaft coupler | Motor shaft to leadscrew |
 | microSD card + USB reader | Flashed on your own computer with Imager, then into the Pi |
 | Micro-HDMI to HDMI cable | Pi's HDMI0 port (the one next to USB-C) to a monitor |
@@ -26,22 +26,36 @@ Nothing in this repo has been run on the real hardware yet. Everything below is 
 
 ## Full wiring (Uno)
 ```
- 12 V adapter --> barrel socket --red---> VM   \  driver power
-                                --black-> GND  /  terminal block
+ 12 V adapter --> barrel socket --red---> +    \  terminal block,
+                                --black-> -    /  left two screws
 
- Uno 5V  -----> VIO   \
+ Uno 5V  -----> VDD   \
  Uno GND -----> GND    |
  Uno D3  -----> STEP   |  driver header pins
  Uno D4  -----> DIR    |  (through the breadboard)
  Uno D5  -----> EN    /
 
- Motor Red / Yellow --> A1 / A2   \  driver motor
- Motor Green / Gray --> B1 / B2   /  terminal block
+ Motor Red / Yellow --> 1A / 1B   \  terminal block,
+ Motor Green / Gray --> 2A / 2B   /  right four screws (2B 2A 1A 1B)
 
  Uno USB --> lab desktop (power + Serial Monitor)
 ```
-Match the names to the board's silkscreen. The Uno GND and the 12 V black lead both land on the driver's GND,
-which gives the Uno and the motor supply a common ground. The motor supply never connects to the Uno itself.
+The Uno GND goes to the header GND pin and the 12 V black lead to the terminal block's **−**. The board joins
+them internally, which gives the Uno and the motor supply a common ground (check with the meter's continuity
+mode in Stage 0). The motor supply never connects to the Uno itself.
+
+**Board labels.** The names above are what the Adafruit board prints. Other guides and the TMC2209 datasheet
+use different names for the same things:
+
+| On this board | Datasheet / other guides | What it is |
+|---|---|---|
+| **+** / **−** (terminal block) | VM / GND, VMOT | Motor supply, 12 V |
+| **VDD** (header) | VIO, VCC_IO | Logic supply: 5 V from the Uno, 3.3 V from the Pi |
+| **1A 1B** / **2A 2B** | A1 A2 / B1 B2 (OA1 OA2 / OB1 OB2 on the chip) | Motor coil 1 / coil 2 |
+| **S**, **F**, **B** LEDs | | Step, and the two direction LEDs |
+| **UART** | PDN_UART | Not used here |
+| **MS1**, **MS2**, **DIAG**, **INDEX**, **SPRD** jumper | | Leave unconnected / untouched (1/8 microstepping) |
+| **ILimit 0->2A** pot | | Motor current limit |
 
 ## Lab desktop setup
 Only these files are needed for the Uno work. Read this checklist on GitHub in the browser.
@@ -88,7 +102,7 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
 - Calipers or a ruler
 
 **Nice to have**
-- 100 uF electrolytic capacitor, 25 V or higher, for across VM and GND
+- 100 uF electrolytic capacitor, 25 V or higher, for across the terminal block's + and −
 - Tape or labels for marking the coil pairs
 
 **When the Pi comes in**
@@ -109,37 +123,39 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
    (1/4"-16 is 1.5875 mm per turn). If it differs, set `LEAD_MM` to measured travel divided by 10.
 3. **Syringe bore.** Measure the plunger travel `L` in mm between the 0 and 5 mL marks, then
    `SYRINGE_ID_MM = 2 * sqrt(5000 / (pi * L))`. The default of 12.06 mm is a typical 5 mL value, not measured.
+4. **Ground link.** Continuity mode between the terminal block's **−** and the header **GND** pin: it should beep.
+   If it doesn't, also run a jumper from the Uno GND to the **−** screw.
 
 ## Stage 1: Uno wiring (motor power OFF, motor not connected)
-No 12 V supply is needed. The Uno runs from USB, and the driver's logic side (VIO) runs from the Uno's 5V pin.
+No 12 V supply is needed. The Uno runs from USB, and the driver's logic side (VDD) runs from the Uno's 5V pin.
 This stage only checks that STEP, DIR and EN reach the driver.
 
 | TMC2209 | Connects to |
 |---|---|
-| VIO | Uno 5V |
-| GND | Uno GND **and** the 12 V supply minus |
+| VDD | Uno 5V |
+| GND (header) | Uno GND |
 | STEP | D3 |
 | DIR | D4 |
 | EN | D5 (active low) |
-| VM | 12 V supply plus (leave off for now) |
-| A1 / A2 | Red / Yellow |
-| B1 / B2 | Green / Gray |
+| **+** / **−** (terminal block) | 12 V red / black leads (leave off for now) |
+| 1A / 1B | Red / Yellow |
+| 2A / 2B | Green / Gray |
 
 Only one controller (Uno or Pi) may be connected to STEP, DIR and EN at a time. Never connect Uno outputs to Pi pins.
 
-Upload `arduino/bringup/bringup.ino` (Tools > Board > Arduino Uno, pick the COM port). With VM off, the
-yellow STEP LED and the red and green DIR LEDs on the driver should light, in a pattern of one revolution each
+Upload `arduino/bringup/bringup.ino` (Tools > Board > Arduino Uno, pick the COM port). With the 12 V off,
+the driver's **S** (step) LED should flicker and the **F** / **B** (direction) LEDs should swap, in a pattern of one revolution each
 way, a pause, and a repeat. Unsoldered headers are fine for this stage.
 
 ## Stage 1b: pump sketch logic test (no motor)
-Same wiring as Stage 1, VM and motor still disconnected. Upload `arduino/pump_serial/pump_serial.ino` and open the
+Same wiring as Stage 1, 12 V and motor still disconnected. Upload `arduino/pump_serial/pump_serial.ino` and open the
 Serial Monitor at 115200 baud, line ending "Newline". This checks the firmware logic only.
 
 | Send | Expect |
 |---|---|
 | On upload | `pump ready: 0.113 uL/step` and the command list |
 | `STATUS` | `idle pos=0 steps (0.000 mL of 5.0)` |
-| `ZERO` then `RUN 0.5 3` | `RUN 4412 steps at 441.16 steps/s` (last digits may differ slightly), STEP LED blinks about 10 s, then `DONE` |
+| `ZERO` then `RUN 0.5 3` | `RUN 4412 steps at 441.16 steps/s` (last digits may differ slightly), **S** LED blinks about 10 s, then `DONE` |
 | `RUN 6 1` | `ERR past the end of the syringe` (more than the 5 mL stroke) |
 | `RUN 1 20` | `ERR rate needs ... steps/s, over MAX_HZ` (ceiling is about 10 mL/min) |
 | `ZERO` then `PULL 0.5 3` | `ERR past the start; retract less or use ZERO` |
@@ -150,11 +166,11 @@ If the lab has an oscilloscope, probe STEP during `RUN 1 1`: it should read abou
 
 ## Stage 2: motor
 
-> Never power VM from the Uno's 5V pin. A lab bench supply set to 12 V with a 0.5 A current limit also works
+> Never power the **+** terminal from the Uno's 5V pin. A lab bench supply set to 12 V with a 0.5 A current limit also works
 > in place of the adapter, and is the gentlest option for a first spin.
 
-> **Solder the headers first.** With 12 V on VM, a header pin that loses contact can damage the driver or the Uno.
-> If GND or VIO drops out, current can find a path through the signal pins, and a loose EN pin can float and
+> **Solder the headers first.** With 12 V on the terminal block, a header pin that loses contact can damage the driver or the Uno.
+> If GND or VDD drops out, current can find a path through the signal pins, and a loose EN pin can float and
 > enable the motor unexpectedly. If you must run before soldering, press the board down firmly, don't touch it
 > while powered, and keep the run short.
 
@@ -170,13 +186,13 @@ power terminal block.
 **First spin**
 1. Turn the driver's current pot to the low end. The motor is rated 0.35 A. The datasheet says current scales with
    VREF, and my estimate is about 0.45-0.5 V for roughly 0.35 A. Check Adafruit's guide for where to measure VREF.
-2. Connect the motor to the motor terminal block **before** powering VM. Never unplug it while VM is on.
-3. Clamp the + lead into VM and the - lead into GND on the power terminal block. Recheck both.
+2. Connect the motor to the motor terminal block **before** applying 12 V. Never unplug it while 12 V is on.
+3. Clamp the + lead into **+** and the - lead into **−** on the terminal block. Recheck both.
 4. Upload `bringup.ino` with the Uno on USB, then plug the adapter into the wall. Expect one revolution each
    way, a pause, and a repeat.
 5. If the motor only buzzes or shakes, a coil pair is crossed. If it runs backward, swap one coil's two wires.
 6. If the driver or motor gets very hot, cut power and lower the pot. If the supply wires are long, add a 100 uF
-   or larger capacitor across VM and GND at the board.
+   or larger capacitor across **+** and **−** at the board (stripe side to **−**).
 
 To power down: unplug the adapter first, then the Uno's USB.
 
@@ -222,18 +238,18 @@ Python files ride along on the card's boot partition, so no USB stick is needed.
 4. Check pyserial is there: `python3 -c "import serial"` (no output means it is).
 
 **Rewire the driver for the Pi (all power off)**
-1. Disconnect the Uno's STEP, DIR, EN, VIO and GND wires from the driver completely.
+1. Disconnect the Uno's STEP, DIR, EN, VDD and GND wires from the driver completely.
 2. Wire the Pi with male-to-female jumpers:
 
 | TMC2209 | Pi pin |
 |---|---|
-| VIO | 3.3V (pin 1) |
+| VDD | 3.3V (pin 1) |
 | GND | GND (pin 6) |
 | STEP | GPIO17 (pin 11) |
 | DIR | GPIO27 (pin 13) |
 | EN | GPIO22 (pin 15) |
 
-VM, GND and the motor stay on the terminal blocks as before. VIO must be 3.3 V, never 5 V, on the Pi.
+The 12 V leads and the motor stay on the terminal block as before. VDD must be 3.3 V, never 5 V, on the Pi.
 3. Boot the Pi, plug in the 12 V adapter, and run `python3 stepper.py`: one revolution each way.
 4. Then `python3 pump.py --dry-run` with your volume and rate to check the numbers before a real run.
    Set `LEAD_MM`, `SYRINGE_ID_MM` and `SYRINGE_VOLUME_ML` in `pump.py` first (they start as None).
