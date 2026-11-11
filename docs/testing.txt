@@ -1,0 +1,21 @@
+1. Motor alone (coupler and leadscrew off)
+Run bringup.ino and pinch the bare shaft while it turns.
+
+Pot near the low end: it should be easy to stop.
+Pot about a quarter of the way up: it should take real effort to stop.
+If both feel the same, or the motor is easy to stop at both, the problem is electrical:
+
+Check that all four motor wires are clamped tight. Thin motor wires often slip out of screw terminals. Tug each one.
+After the first revolution, the sketch holds the motor still for 1 s with the driver still on. Try turning the shaft by hand then. It should resist firmly at every position. If it feels weak or notchy at some positions, one coil isn't being driven: recheck the 1A/1B and 2A/2B wiring and the coil-pair resistances.
+If the motor ever goes limp in the middle of a move, suspect the EN or VDD header contacts.
+2. Leadscrew alone (motor off)
+Put the leadscrew's coupler hub and nut on and turn it by hand with your fingertips.
+
+It should spin easily. A 1/4"-16 rod with a loose nut needs very little torque.
+If it's stiff, the nut is binding or the rod is bent. Run the nut along its whole length to check.
+3. Coupler setup
+
+Spider insert: make sure the rubber insert is between the jaws. Without it, the metal jaws bang into each other.
+Gap: leave a small gap of about 1 mm between the insert and each hub's face. If the hubs are pushed hard together, they rub and drag.
+Alignment: the leadscrew has to line up with the motor shaft. If you're holding the rod by hand or it sags, the coupler binds. Support the far end at the same height as the motor shaft.
+To remove the knocking from direction changes: in bringup.ino, change turn(LOW, STEPS_PER_REV); to turn(HIGH, STEPS_PER_REV);. The motor then always turns the same way, so you can see whether it drives the leadscrew steadily.
