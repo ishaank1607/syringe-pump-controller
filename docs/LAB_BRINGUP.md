@@ -1,8 +1,8 @@
 # Lab bring-up checklist
 
 Goal: confirm the driver, motor and wiring work using the Arduino Uno, then the hotplate, then the Raspberry Pi.
-Nothing in this repo has been run on the real hardware yet. Everything below is the plan, and the numbers marked
-"estimate" need to be checked with a meter or against the manuals.
+Status: Stages 0-2 have run on the real hardware (the motor turns the leadscrew). Stage 3 onward is still the
+plan, and the numbers marked "estimate" need to be checked with a meter or against the manuals.
 
 ## Order of work
 1. [Lab desktop setup](#lab-desktop-setup): get both sketches into the Arduino IDE and compile them.
@@ -17,12 +17,13 @@ Nothing in this repo has been run on the real hardware yet. Everything below is 
 |---|---|
 | 12 V DC adapter (5.5 x 2.1 mm, center positive) | Plugs into the barrel socket |
 | Barrel socket with red/black 18 AWG leads | Driver's terminal block, two leftmost screws: red to **+**, black to **−** |
-| Elegoo Uno R3 (or the lab's Uno) | Driver's STEP, DIR, EN, VDD and GND header pins, through the breadboard |
+| Elegoo Uno R3 (or the lab's Uno) | Driver's STEP, DIR, EN, UART, VDD and GND header pins, through the breadboard |
 | NEMA 17 motor | Driver's terminal block, four right screws (2B 2A 1A 1B) |
 | Shaft coupler | Motor shaft to leadscrew |
 | microSD card + USB reader | Flashed on your own computer with Imager, then into the Pi |
 | Micro-HDMI to HDMI cable | Pi's HDMI0 port (the one next to USB-C) to a monitor |
 | Jumper wires | Male-to-male for the Uno, male-to-female for the Pi header |
+| 1 kΩ resistor | Between Uno D7 and the driver's UART pin |
 
 ## Full wiring (Uno)
 ```
@@ -33,10 +34,12 @@ Nothing in this repo has been run on the real hardware yet. Everything below is 
  Uno GND -----> GND    |
  Uno D3  -----> STEP   |  driver header pins
  Uno D4  -----> DIR    |  (through the breadboard)
- Uno D5  -----> EN    /
+ Uno D5  -----> EN    |
+ Uno D6  -----> UART  |  (straight)
+ Uno D7  --1k-> UART  /  (through a 1 kOhm resistor)
 
  Motor Red / Yellow --> 1A / 1B   \  terminal block,
- Motor Green / Gray --> 2A / 2B   /  right four screws (2B 2A 1A 1B)
+ Motor Green / Gray --> 2B / 2A   /  right four screws (2B 2A 1A 1B)
 
  Uno USB --> lab desktop (power + Serial Monitor)
 ```
@@ -52,10 +55,10 @@ use different names for the same things:
 | **+** / **−** (terminal block) | VM / GND, VMOT | Motor supply, 12 V |
 | **VDD** (header) | VIO, VCC_IO | Logic supply: 5 V from the Uno, 3.3 V from the Pi |
 | **1A 1B** / **2A 2B** | A1 A2 / B1 B2 (OA1 OA2 / OB1 OB2 on the chip) | Motor coil 1 / coil 2 |
-| **S**, **F**, **B** LEDs | | Step, and the two direction LEDs |
-| **UART** | PDN_UART | Not used here |
-| **MS1**, **MS2**, **DIAG**, **INDEX**, **SPRD** jumper | | Leave unconnected / untouched (1/8 microstepping) |
-| **ILimit 0->2A** pot | | Motor current limit |
+| **S** (yellow), **F** (green), **B** (red) LEDs | | S: stepping. F lit when DIR is low, B when DIR is high |
+| **UART** | PDN_UART | Single-wire serial: Uno D6 straight, D7 through 1 kΩ. Only answers with 12 V on |
+| **MS1**, **MS2**, **DIAG**, **INDEX**, **SPRD** jumper | | Leave unconnected / untouched. Microstepping (1/8) and SpreadCycle are set over UART |
+| **ILimit 0->2A** pot | | Current limit. `pump_serial.ino` ignores it (current set over UART); `bringup.ino` still scales by it |
 
 ## Lab desktop setup
 Only these files are needed for the Uno work. Read this checklist on GitHub in the browser.
@@ -71,9 +74,11 @@ The Python files are for the Pi and the hotplate, later.
    **File > New Sketch**, paste over the template, and save as `bringup` or `pump_serial`. The IDE needs each sketch
    in a folder of the same name, and saving this way does that. (Or use **Code > Download ZIP** and open the
    extracted `.ino` files.)
-2. **Compile.** **Tools > Board > Arduino AVR Boards > Arduino Uno**, then **Verify** (checkmark) each sketch.
+2. **Install TMCStepper.** Both sketches use it: **Tools > Manage Libraries**, search `TMCStepper`, install
+   (tested with 0.7.3). SoftwareSerial comes with the Uno core.
+3. **Compile.** **Tools > Board > Arduino AVR Boards > Arduino Uno**, then **Verify** (checkmark) each sketch.
    Both should end with "Done compiling". An error usually means a line was lost in the copy-paste.
-3. **Pick the port.** Plug in the Uno over USB and choose it under **Tools > Port** (for example `COM4`).
+4. **Pick the port.** Plug in the Uno over USB and choose it under **Tools > Port** (for example `COM4`).
    If unsure which port it is, unplug the Uno and see which entry disappears. The Elegoo Uno uses the same
    **Arduino Uno** board setting. If it shows no port at all, it may use a CH340 USB chip, which needs Elegoo's
    CH340 driver on Windows.
@@ -118,7 +123,8 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
 
 ## Stage 0: before any power
 1. **Coil pairs.** With the multimeter, Red-Yellow should read about 34 ohm, and Green-Gray about 34 ohm.
-   Between the two pairs it should read open. If not, re-sort the wires before going further.
+   Between the two pairs it should read open. If not, re-sort the wires before going further. Mixing wires from
+   the two coils is what made the first spin weak (it couldn't turn the leadscrew), whatever the current setting.
 2. **Screw lead.** Mark the nut, turn the screw 10 turns, and measure the travel. Expect about 15.9 mm
    (1/4"-16 is 1.5875 mm per turn). If it differs, set `LEAD_MM` to measured travel divided by 10.
 3. **Syringe bore.** Measure the plunger travel `L` in mm between the 0 and 5 mL marks, then
@@ -128,7 +134,8 @@ The Uno and breadboards stay in the lab. Check what the lab already has before c
 
 ## Stage 1: Uno wiring (motor power OFF, motor not connected)
 No 12 V supply is needed. The Uno runs from USB, and the driver's logic side (VDD) runs from the Uno's 5V pin.
-This stage only checks that STEP, DIR and EN reach the driver.
+This stage only checks that STEP, DIR and EN reach the driver. The UART can't be checked yet: the driver's
+internal logic runs from the 12 V, so it only answers once that is on (Stage 2).
 
 | TMC2209 | Connects to |
 |---|---|
@@ -137,15 +144,16 @@ This stage only checks that STEP, DIR and EN reach the driver.
 | STEP | D3 |
 | DIR | D4 |
 | EN | D5 (active low) |
+| UART | D6 straight, and D7 through a 1 kΩ resistor |
 | **+** / **−** (terminal block) | 12 V red / black leads (leave off for now) |
 | 1A / 1B | Red / Yellow |
-| 2A / 2B | Green / Gray |
+| 2B / 2A | Green / Gray |
 
 Only one controller (Uno or Pi) may be connected to STEP, DIR and EN at a time. Never connect Uno outputs to Pi pins.
 
 Upload `arduino/bringup/bringup.ino` (Tools > Board > Arduino Uno, pick the COM port). With the 12 V off,
-the driver's **S** (step) LED should glow steadily for about 4 s (one revolution, 400 steps/s is too fast to see
-as blinking), then **F** / **B** (direction) swap and S glows another 4 s, then all dark for the pause, and repeat.
+the Serial Monitor shows `ERROR: UART failed!` (expected here). The sketch then steps in one direction forever:
+the **S** LED glows steadily (400 steps/s is too fast to see as blinking) and **F** (green) is lit, since DIR is low.
 Unsoldered headers are fine for this stage.
 
 **If S stays dark:** with `bringup.ino` running, set the meter to DC volts, black probe on GND, and touch the red
@@ -166,16 +174,14 @@ The **S** LED will **not** visibly light here. This sketch holds STEP high for o
 
 | Send | Expect |
 |---|---|
-| On upload | `pump ready: 0.113 uL/step` and the command list |
+| On upload | `driver: no UART reply yet (fine if the 12 V is off)`, `pump ready: 0.113 uL/step` and the command list |
 | `STATUS` | `idle pos=0 steps (0.000 mL of 5.0)` |
-| `ZERO` then `RUN 0.5 3` | `RUN 4412 steps at 441.16 steps/s` (last digits may differ slightly), then `DONE` about 10 s later |
+| `ZERO` then `RUN 0.5 3` | `ERR driver not answering over UART (is the 12 V on?)`: a valid move needs the driver, so this is the expected reply without 12 V |
 | `RUN 6 1` | `ERR past the end of the syringe` (more than the 5 mL stroke) |
 | `RUN 1 20` | `ERR rate needs ... steps/s, over MAX_HZ` (ceiling is about 10 mL/min) |
 | `ZERO` then `PULL 0.5 3` | `ERR past the start; retract less or use ZERO` |
-| `RUN 2 1`, then `STATUS` | `running` (a second `RUN` now gives `ERR busy`) |
-| `STOP` | `STOPPED`, and `STATUS` shows the partial position |
 
-If the lab has an oscilloscope, probe STEP during `RUN 1 1`: it should read about 147 Hz (1 mL/min).
+The moves themselves are tested in Stage 3, with the 12 V on.
 
 ## Stage 2: motor
 
@@ -197,21 +203,39 @@ The 18 AWG leads are too thick for breadboard holes and will damage them. Clamp 
 power terminal block.
 
 **First spin**
-1. Turn the driver's current pot to the low end. The motor is rated 0.35 A. The datasheet says current scales with
-   VREF, and my estimate is about 0.45-0.5 V for roughly 0.35 A. Check Adafruit's guide for where to measure VREF.
+1. `bringup.ino` sets 350 mA over UART, but the driver still scales that by the **ILimit** pot, so a pot at the
+   bottom gives almost no current. Set the pot about a quarter of the way up or more. At 12 V the 34 ohm winding
+   caps the current near the motor's 0.35 A rating anyway.
 2. Connect the motor to the motor terminal block **before** applying 12 V. Never unplug it while 12 V is on.
 3. Clamp the + lead into **+** and the - lead into **−** on the terminal block. Recheck both.
-4. Upload `bringup.ino` with the Uno on USB, then plug the adapter into the wall. Expect one revolution each
-   way, a pause, and a repeat.
-5. If the motor only buzzes or shakes, a coil pair is crossed. If it runs backward, swap one coil's two wires.
-6. If the driver or motor gets very hot, cut power and lower the pot. If the supply wires are long, add a 100 uF
+4. Plug the adapter into the wall, **then press the Uno's reset button**. The UART only answers with 12 V on, so the
+   settings must be sent after it. The Serial Monitor should show `SUCCESS: TMC2209 UART connected!`
+5. The motor turns steadily in one direction, forever. Run it with the syringe off and the nut free, or unplug
+   before the nut reaches the end of the rod.
+6. If the motor is weak, only buzzes, or shakes, a coil pair is crossed (see Stage 0). If it runs backward, swap
+   one coil's two wires.
+7. If the driver or motor gets very hot, cut power and lower the pot. If the supply wires are long, add a 100 uF
    or larger capacitor across **+** and **−** at the board (stripe side to **−**).
 
 To power down: unplug the adapter first, then the Uno's USB.
 
 ## Stage 3: pump sketch
 Upload `arduino/pump_serial/pump_serial.ino`. Serial Monitor: 115200 baud, line ending "Newline".
-Edit `LEAD_MM` and `SYRINGE_ID_MM` first if Stage 0 gave different numbers.
+Edit `LEAD_MM` and `SYRINGE_ID_MM` first if Stage 0 gave different numbers. With the 12 V on before the upload
+(or press reset after plugging it in), the first line is `driver: UART OK`. Either way, the sketch re-sends the
+driver settings before every move, and refuses the move if the driver doesn't answer.
+
+**Command checks (no syringe on)**
+
+| Send | Expect |
+|---|---|
+| `ZERO` then `RUN 0.5 3` | `RUN 4412 steps at 441.16 steps/s` (last digits may differ slightly), then `DONE` about 10 s later |
+| `RUN 2 1`, then `STATUS` | `running` (a second `RUN` now gives `ERR busy`) |
+| `STOP` | `STOPPED`, and `STATUS` shows the partial position |
+
+If the lab has an oscilloscope, probe STEP during `RUN 1 1`: it should read about 147 Hz (1 mL/min).
+
+**Commands**
 
 | Command | Meaning |
 |---|---|

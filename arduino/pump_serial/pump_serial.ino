@@ -1,5 +1,6 @@
 // Constant-rate leadscrew syringe pump, controlled over USB serial.
-// TMC2209 in STEP/DIR mode. Serial Monitor: 115200 baud, line ending "Newline".
+// TMC2209 in STEP/DIR mode, configured over its UART pin. Serial Monitor: 115200 baud, line ending "Newline".
+// Needs the TMCStepper library (Library Manager).
 //
 // Commands:
 //   RUN <mL> <mL/min>    push the plunger (dispense)
@@ -8,16 +9,26 @@
 //   ZERO                 call the current plunger position "fully back" (full syringe)
 //   STATUS               print state and position
 // Position is tracked from ZERO and is lost on reset. Moves past either end are refused.
+// The driver is (re)configured before every move, since it forgets its UART settings when the 12 V goes off.
+
+#include <TMCStepper.h>
+#include <SoftwareSerial.h>
 
 const uint8_t STEP_PIN = 3;
 const uint8_t DIR_PIN = 4;
 const uint8_t EN_PIN = 5;                 // active LOW
+const uint8_t SW_RX = 6;                  // straight to the driver's UART pin
+const uint8_t SW_TX = 7;                  // to the driver's UART pin through 1k
 
-const float STEPS_PER_REV = 1600.0;       // 200 full steps x 8 (driver default 1/8 microstepping)
+const float R_SENSE = 0.11;               // ohms; check the marking on the board's sense resistors
+const uint8_t DRIVER_ADDRESS = 0b00;      // MS1 and MS2 low/unconnected
+const uint16_t RUN_CURRENT_MA = 350;      // RMS, the motor's rating
+
+const float STEPS_PER_REV = 1600.0;       // 200 full steps x 8 (1/8 microstepping, set over UART)
 const float LEAD_MM = 25.4 / 16;          // 1/4"-16 screw, single start (verify by measuring)
 const float SYRINGE_ID_MM = 12.06;        // 5 mL syringe, typical value (measure yours)
 const float SYRINGE_VOLUME_ML = 5.0;
-const bool PUSH_LEVEL = HIGH;             // DIR level that pushes the plunger; flip if reversed
+const bool PUSH_LEVEL = LOW;              // DIR level that pushes (Green on 2B, Gray on 2A); flip if reversed
 const float FLOW_CAL = 1.0;               // measured / commanded volume; set after weighing a test
 const float MAX_HZ = 1500.0;
 const bool HOLD_AFTER_MOVE = false;       // true keeps the motor energized when a move ends
@@ -37,6 +48,22 @@ long pos = 0;                             // steps from "fully back"
 char buf[48];
 uint8_t n = 0;
 
+SoftwareSerial driverSerial(SW_RX, SW_TX);
+TMC2209Stepper driver(&driverSerial, R_SENSE, DRIVER_ADDRESS);
+
+// Check the UART link first, then write the settings. Returns false if the driver doesn't answer
+// (usually the 12 V is off, since the driver's logic runs from it).
+bool configureDriver() {
+  if (driver.test_connection() != 0) return false;
+  driver.begin();                         // UART controls the driver, microsteps from the register
+  driver.I_scale_analog(false);           // current from rms_current() alone, not scaled by the pot
+  driver.toff(4);
+  driver.rms_current(RUN_CURRENT_MA);
+  driver.microsteps(8);
+  driver.en_spreadCycle(true);            // SpreadCycle: steadier torque at low speed than StealthChop
+  return true;
+}
+
 void release() {
   if (!HOLD_AFTER_MOVE) digitalWrite(EN_PIN, HIGH);
 }
@@ -50,10 +77,11 @@ void startMove(bool push, float volMl, float rateMlMin) {
   if (hz > MAX_HZ) { Serial.print("ERR rate needs "); Serial.print(hz, 0); Serial.println(" steps/s, over MAX_HZ"); return; }
   if (push && pos + (long)steps > FULL_STEPS) { Serial.println("ERR past the end of the syringe"); return; }
   if (!push && (long)steps > pos) { Serial.println("ERR past the start; retract less or use ZERO"); return; }
+  if (!configureDriver()) { Serial.println("ERR driver not answering over UART (is the 12 V on?)"); return; }
 
   digitalWrite(DIR_PIN, push ? PUSH_LEVEL : !PUSH_LEVEL);
   digitalWrite(EN_PIN, LOW);
-  delay(200);                             // StealthChop needs a moment at standstill
+  delay(200);                             // let the current settle before the first step
 
   period = 1e6 / hz;
   frac = 0;
@@ -120,6 +148,8 @@ void setup() {
   pinMode(STEP_PIN, OUTPUT);
   digitalWrite(DIR_PIN, LOW);
   pinMode(DIR_PIN, OUTPUT);
+  driverSerial.begin(19200);
+  Serial.println(configureDriver() ? "driver: UART OK" : "driver: no UART reply yet (fine if the 12 V is off)");
   Serial.print("pump ready: "); Serial.print(ML_PER_STEP * 1000, 3); Serial.println(" uL/step");
   Serial.println("commands: RUN, PULL, STOP, ZERO, STATUS");
 }

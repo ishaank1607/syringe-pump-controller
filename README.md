@@ -27,7 +27,7 @@ The Pi wiring and notes below apply to `stepper.py` and `pump.py`. For the Uno w
 | DIR | GPIO27 (pin 13) |
 | EN | GPIO22 (pin 15), active low |
 | 1A / 1B | Coil 1: Red / Yellow |
-| 2A / 2B | Coil 2: Green / Gray |
+| 2B / 2A | Coil 2: Green / Gray |
 
 - **Motor:** XY42STH34-0354A, 1.8 deg (200 steps/rev), 12V rated, 0.35A per phase, 34 ohm, 33 mH, bipolar 4-wire. Datasheet colors: A = Red, C = Yellow (coil 1), B = Gray, D = Green (coil 2).
 - **Verify the coil pairs:** use a multimeter. Each pair (Red-Yellow, Green-Gray) should read about 34 ohm, and across pairs it should be open. Red and Yellow must share a coil (both on 1A/1B); same for Green and Gray (2A/2B). Which wire goes to 1A versus 1B only sets direction. If the motor spins the wrong way, swap one coil's two wires or flip the DIR logic.
