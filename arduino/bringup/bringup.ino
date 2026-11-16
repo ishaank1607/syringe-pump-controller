@@ -1,47 +1,52 @@
-// Bring-up test: Uno -> TMC2209 (STEP/DIR mode) -> NEMA 17.
-// Turns one revolution each way, forever. Open the Serial Monitor at 115200 to watch.
+#include <TMCStepper.h>
+#include <SoftwareSerial.h>
 
 const uint8_t STEP_PIN = 3;
-const uint8_t DIR_PIN = 4;
-const uint8_t EN_PIN = 5;                 // active LOW
+const uint8_t DIR_PIN  = 4;
+const uint8_t EN_PIN   = 5;
+const uint8_t SW_RX    = 6; // Connect directly to TMC2209 UART pin
+const uint8_t SW_TX    = 7; // Connect to SW_RX via a 1k Ohm resistor
 
-const int STEPS_PER_REV = 1600;           // 200 full steps x 8 (driver default 1/8 microstepping)
-const unsigned int HALF_PERIOD_US = 1250; // 400 steps/s = 0.25 rev/s (15 RPM)
+#define R_SENSE 0.11f       // Standard sense resistor value
+#define DRIVER_ADDRESS 0b00 // MS1 and MS2 low/unconnected
+
+SoftwareSerial SoftSerial(SW_RX, SW_TX);
+TMC2209Stepper driver(&SoftSerial, R_SENSE, DRIVER_ADDRESS);
+
+const unsigned int HALF_PERIOD_US = 1250; // Steady top speed... HIGHER NUMBER = SLOWER
 
 void setup() {
   Serial.begin(115200);
-  digitalWrite(EN_PIN, HIGH);             // set the level before enabling the output: no glitch
-  pinMode(EN_PIN, OUTPUT);                // driver disabled until we say so
-  digitalWrite(STEP_PIN, LOW);
-  pinMode(STEP_PIN, OUTPUT);
-  digitalWrite(DIR_PIN, LOW);
-  pinMode(DIR_PIN, OUTPUT);
-  Serial.println("bring-up test: STEP=D3 DIR=D4 EN=D5");
-}
+  SoftSerial.begin(19200); // Reliable baud rate for Arduino Uno SoftwareSerial
 
-void turn(bool dirLevel, int steps) {
-  digitalWrite(DIR_PIN, dirLevel);
-  delayMicroseconds(5);                   // DIR setup time
-  for (int i = 0; i < steps; i++) {
-    digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(HALF_PERIOD_US);
-    digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(HALF_PERIOD_US);
+  pinMode(EN_PIN, OUTPUT);
+  digitalWrite(EN_PIN, HIGH);
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  digitalWrite(DIR_PIN, LOW); // Lock direction, HIGH = PULL, LOW = PUSH
+
+  driver.begin();
+  driver.toff(4);
+  driver.rms_current(350);        // 350mA RMS
+  driver.microsteps(8);           // 1/8 microstepping
+  driver.en_spreadCycle(true);    // Force SpreadCycle (high torque)
+  driver.pwm_autoscale(false);
+
+  // Verify UART communication
+  uint8_t result = driver.test_connection();
+  if (result == 0) {
+    Serial.println("SUCCESS: TMC2209 UART connected! Running steady DIR HIGH.");
+  } else {
+    Serial.print("ERROR: UART failed! Code: ");
+    Serial.println(result);
   }
+
+  digitalWrite(EN_PIN, LOW); // Enable motor
 }
 
 void loop() {
-  digitalWrite(EN_PIN, LOW);              // enable driver
-  delay(200);                             // StealthChop needs a moment at standstill
-
-  Serial.println("1 rev, DIR high");
-  turn(HIGH, STEPS_PER_REV);
-  delay(1000);
-
-  Serial.println("1 rev, DIR low");
-  turn(LOW, STEPS_PER_REV);
-
-  digitalWrite(EN_PIN, HIGH);             // release the motor between cycles
-  Serial.println("pause");
-  delay(2000);
+  digitalWrite(STEP_PIN, HIGH);
+  delayMicroseconds(HALF_PERIOD_US);
+  digitalWrite(STEP_PIN, LOW);
+  delayMicroseconds(HALF_PERIOD_US);
 }
